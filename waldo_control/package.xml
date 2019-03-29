@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package>
+  <name>waldo_control</name>
+  <version>0.0.0</version>
+  <description>Communication and control config for the waldo</description>
+
+  <maintainer email="owen@haploid.co">Owen Trueblood</maintainer>
+  <author email="owen@haploid.co">Owen Trueblood</author>
+
+  <license>GPLv3</license>
+
+  <url type="website"></url>
+  <url type="bugtracker"></url>
+  <url type="repository"></url>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <run_depend>controller_manager</run_depend>
+  <run_depend>joint_state_controller</run_depend>
+  <run_depend>robot_state_publisher</run_depend>
+
+  <run_depend>rqt_gui</run_depend>
+  <run_depend>position_controllers</run_depend>
+
+  <run_depend>kuka_rsi_hw_interface</run_depend>
+  <export>
+  </export>
+</package>

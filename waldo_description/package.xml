@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package>
+  <name>waldo_description</name>
+  <version>0.0.0</version>
+  <description>Description of the waldo robot arm hardware</description>
+
+  <maintainer email="owen@haploid.co">Owen Trueblood</maintainer>
+
+  <license>GPLv3</license>
+
+  <url type="website"></url>
+  <url type="bugtracker"></url>
+  <url type="repository"></url>
+
+  <author email="owen@haploid.co">Owen Trueblood</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <export>
+  </export>
+</package>

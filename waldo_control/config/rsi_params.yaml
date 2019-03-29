@@ -1,0 +1,5 @@
+# Address and port to bind for the server that RSI will talk to
+rsi:
+  listen_address: "172.31.1.150"
+  listen_port: 6008
+

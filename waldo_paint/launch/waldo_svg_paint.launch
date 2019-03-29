@@ -1,0 +1,4 @@
+<launch>
+  <node name="waldo_svg_painter" pkg="waldo_paint" type="waldo_svg_paint.py" respawn="false" output="screen">
+  </node>
+</launch>
