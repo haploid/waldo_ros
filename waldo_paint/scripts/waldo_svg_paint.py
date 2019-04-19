@@ -7,37 +7,57 @@ import rospy
 import moveit_commander
 import moveit_msgs.msg
 import geometry_msgs.msg
+import tf2_ros
+import tf2_geometry_msgs
 import tf_conversions
 from svgpathtools import svg2paths
 import pygame
 from pygame.locals import*
+from numpy import matmul
 
 from std_msgs.msg import String
+
+tf_buffer = tf2_ros.Buffer()
 
 def scale_pt(pt):
     x, y = pt
     return (x / 1000.0, y / 1000.0)
 
+def get_base_to_canvas_transform():
+    canvas_to_base_tf = None
+
+    while canvas_to_base_tf == None:
+        try:
+            canvas_to_base_tf = tf_buffer.lookup_transform('base', 'canvas', rospy.Time())
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+            rospy.sleep(0.1)
+            continue
+
+    return tf_conversions.posemath.toMatrix(tf2_geometry_msgs.transform_to_kdl(canvas_to_base_tf))
+
 # Get pose oriented toward canvas with initial_pose as origin
 def painting_pose(initial_pose, x, y, z):
-    wpose = geometry_msgs.msg.Pose()
+    # Figure out where the canvas is
+    canvas_to_base_4x4 = get_base_to_canvas_transform()
 
-    #ten_deg = 10.0 / 360.0 * 2.0 * math.pi
-    #roll = 0
-    #pitch = math.pi / 2
-    #yaw = -math.pi / 2
-    #wpose.orientation = geometry_msgs.msg.Quaternion(*tf_conversions.transformations.quaternion_from_euler(roll, pitch, yaw))
+    # Set pose for point to paint
 
-    wpose.orientation.x = initial_pose.orientation.x
-    wpose.orientation.y = initial_pose.orientation.y
-    wpose.orientation.z = initial_pose.orientation.z
-    wpose.orientation.w = initial_pose.orientation.w
+    paint_pose = geometry_msgs.msg.Pose()
 
-    wpose.position.x = initial_pose.position.x + x
-    wpose.position.y = initial_pose.position.y + y
-    wpose.position.z = initial_pose.position.z + z
+    paint_pose.orientation.x = 0
+    paint_pose.orientation.y = 0
+    paint_pose.orientation.z = 0
+    paint_pose.orientation.w = 1
 
-    return copy.deepcopy(wpose)
+    paint_pose.position.x = x
+    paint_pose.position.y = y
+    paint_pose.position.z = z
+
+    paint_pose_4x4 = tf_conversions.posemath.toMatrix(tf_conversions.posemath.fromMsg(paint_pose))
+
+    paint_base_pose = tf_conversions.posemath.toMsg(tf_conversions.posemath.fromMatrix(matmul(paint_pose_4x4, canvas_to_base_4x4)))
+
+    return copy.deepcopy(paint_base_pose)
 
 def follow_waypoints(group, waypoints):
     # Do it!
@@ -46,25 +66,28 @@ def follow_waypoints(group, waypoints):
     painting_plan, fraction = group.compute_cartesian_path(waypoints, eef_step, jump_threshold)
     group.execute(painting_plan, wait=True)
 
+paint_offset_x = 0
+paint_offset_y = 0
+lift_for_paint = 0.1
 def dip_brush(initial_pose, group):
     waypoints = []
 
     start_pose = group.get_current_pose().pose
     
     # Move away from canvas
-    waypoints.append(painting_pose(start_pose, 0, 0, 0.2))
+    waypoints.append(painting_pose(start_pose, 0, 0, lift_for_paint))
 
     # Move over paint 
-    waypoints.append(painting_pose(initial_pose, -0.1, -0.1, 0.2))
+    waypoints.append(painting_pose(initial_pose, paint_offset_x, paint_offset_y, lift_for_paint))
 
     # Move into paint 
-    waypoints.append(painting_pose(initial_pose, -0.1, -0.1, 0))
+    waypoints.append(painting_pose(initial_pose, paint_offset_x, paint_offset_y, 0))
 
     # Move over paint 
-    waypoints.append(painting_pose(initial_pose, -0.1, -0.1, 0.2))
+    waypoints.append(painting_pose(initial_pose, paint_offset_x, paint_offset_y, lift_for_paint))
 
     # Move back to where we were
-    waypoints.append(painting_pose(start_pose, 0, 0, 0.2))
+    waypoints.append(painting_pose(start_pose, 0, 0, lift_for_paint))
 
     follow_waypoints(group, waypoints)
 
@@ -112,8 +135,8 @@ def paint_paths(paths):
     dip_brush(initial_pose, group)
     rospy.sleep(0.5)
 
-    group.set_pose_target(initial_pose)
-    group.go(wait=True)
+    #group.set_pose_target(initial_pose)
+    #group.go(wait=True)
 
     moveit_commander.roscpp_shutdown()
 
@@ -177,14 +200,34 @@ def path_points_from_svg(svg_filename):
     
     return paths
 
+def paint_circle():
+    path = []
+
+    r = 200.0
+    offset_x = 200.0
+    offset_y = 200.0 
+
+    count = 360
+    for i in range(0, count):
+        angle = (float(i) / count) * math.pi * 2.0
+        x = offset_x + r * math.cos(angle)
+        y = offset_y + r * math.sin(angle)
+        path.append((x, y))
+
+    paint_paths([path])
+
 def paint_svg(svg_filename):
-  rospy.init_node('waldo_svg_painter', anonymous=True)
   paths = path_points_from_svg(svg_filename)
   paint_paths(paths)
 
 if __name__ == '__main__':
+  rospy.init_node('waldo_svg_painter', anonymous=True)
+
+  listener = tf2_ros.TransformListener(tf_buffer)
+
   try:
-    paint_svg('/path/to/some.svg')
+    #paint_svg('/home/owen/Downloads/export.svg')
+    paint_circle()
   except rospy.ROSInterruptException:
     pass
 
