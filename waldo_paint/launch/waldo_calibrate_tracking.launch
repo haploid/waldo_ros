@@ -1,0 +1,4 @@
+<launch>
+  <node name="waldo_calibrate_tracking" pkg="waldo_paint" type="waldo_calibrate_tracking.py" respawn="false" output="screen">
+  </node>
+</launch>
