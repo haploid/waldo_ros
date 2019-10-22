@@ -1,0 +1,4 @@
+<launch>
+  <node name="follow_vive" pkg="waldo_paint" type="follow_vive.py" respawn="false" output="screen">
+  </node>
+</launch>

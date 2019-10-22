@@ -1,0 +1,5 @@
+<launch>
+  <node pkg="tf" name="broadcast_canvas" type="static_transform_publisher" respawn="false" output="screen" args="0 0 -0.20 0 0 0 1 vive_tracker canvas 100">
+  </node>
+</launch>
+

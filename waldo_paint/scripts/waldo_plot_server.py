@@ -2,7 +2,6 @@
 
 import sys
 import copy
-import time
 import math
 import rospy
 import moveit_commander
@@ -13,17 +12,71 @@ import tf2_geometry_msgs
 import tf_conversions
 import PyKDL
 from svgpathtools import svg2paths
-import pygame
-from pygame.locals import*
 from numpy import matmul
+from threading import Thread
 
 from std_msgs.msg import String
+
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import SocketServer
+
+plotting_path = []
+last_x = 0
+last_y = 0
+last_z = 0
+should_run = False
+
+class HTTPPlottingHandler(BaseHTTPRequestHandler):
+    def _set_headers(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+
+    def do_GET(self):
+        global plotting_path
+        global last_x
+        global last_y
+        global last_z
+        global should_run
+
+        self._set_headers()
+
+        command, value = self.path.split('/')[1:]
+        print('Received command: {} {}'.format(command, value))
+
+        if command == 'xy':
+            last_x, last_y = [float(v) * 5 for v in value.split(',')]
+        elif command == 'z':
+            last_z = 0.1 * (1 - float(value))
+        elif command == 'finish':
+            should_run = True
+
+        plotting_path.append((last_x, last_y, last_z))
+
+        self.wfile.write("")
+
+    def do_HEAD(self):
+        self._set_headers()
+
+    def do_POST(self):
+        self._set_headers()
+        self.wfile.write("OK!")
+
+    def do_PUT(self):
+        self._set_headers()
+        self.wfile.write("OK!")
+
+def run_server():
+    server_address=('192.168.1.104', 1337)
+    httpd = HTTPServer(server_address, HTTPPlottingHandler)
+    print('Starting server...')
+    httpd.serve_forever()
 
 tf_buffer = tf2_ros.Buffer()
 
 def scale_pt(pt):
-    x, y = pt
-    return (x / 1000.0, y / 1000.0)
+    x, y, z = pt
+    return (x / 1000.0, y / 1000.0, z / 1000.0)
 
 def get_canvas_to_base_transform():
     canvas_to_base_tf = None
@@ -67,29 +120,20 @@ def follow_waypoints(group, waypoints):
     eef_step = 0.1 # Resolution of path in meters
     jump_threshold = 0 # Disable jumps
 
-    retries = 3
-
-    while True:
-        if retries < 0:
-            print('Failed to follow waypoints')
-            break
-
+    found_trajectory = False
+    for i in range(0, 3):
         painting_plan, fraction_complete = group.compute_cartesian_path(waypoints, eef_step, jump_threshold)
 
-        if fraction_complete < 0.99:
-            print('Failed to plan path, retrying')
-            retries -= 1
-            continue
+        if fraction_complete > 0.99:
+            found_trajectory = True
+            break
 
-        print('Able to follow {}% of trajectory'.format(fraction_complete * 100))
+    if not found_trajectory:
+        raise Exception('Trajectory not found')
 
-        if not group.execute(painting_plan, wait=True):
-            print('Execution failed, retrying')
-            rospy.sleep(0.1)
-            retries -= 1
-            continue
+    print('Able to follow {}% of trajectory'.format(fraction_complete * 100))
 
-        break
+    group.execute(painting_plan, wait=True)
 
 paint_offset_x = 0
 paint_offset_y = 0
@@ -115,7 +159,7 @@ def dip_brush(group):
     follow_waypoints(group, waypoints)
 
 def paint_path(group, path):
-    offset = 0.03
+    offset = 0.01
     waypoints = []
 
     # Start at current pose
@@ -129,6 +173,7 @@ def paint_path(group, path):
         waypoints.append(painting_pose(x, y, z))
 
     # Move to above start
+    """
     start_x, start_y = scale_pt(path[0])
     move_to(start_x, start_y, offset)
 
@@ -141,8 +186,13 @@ def paint_path(group, path):
     # Away from canvas
     last_x, last_y = scale_pt(path[-1])
     move_to(last_x, last_y, offset)
+    """
+    for x, y, z in map(scale_pt, path):
+        move_to(x, y, z)
 
+    print('Going to follow waypoints')
     follow_waypoints(group, waypoints)
+    print('Done following waypoints')
 
 def paint_paths(paths):
     moveit_commander.roscpp_initialize(sys.argv)
@@ -159,8 +209,8 @@ def paint_paths(paths):
     dip_brush(initial_pose, group)
     rospy.sleep(0.5)
 
-    group.set_pose_target(initial_pose)
-    group.go(wait=True)
+    #group.set_pose_target(initial_pose)
+    #group.go(wait=True)
 
     moveit_commander.roscpp_shutdown()
 
@@ -172,82 +222,17 @@ def plot_paths(paths):
 
     for path in paths:
         paint_path(group, path)
-        rospy.sleep(1)
+        #rospy.sleep(0.1)
 
-    group.set_pose_target(initial_pose)
-    group.go(wait=True)
+    #group.set_pose_target(initial_pose)
+    #group.go(wait=True)
 
     moveit_commander.roscpp_shutdown()
-
-def render_paths(paths):
-    screen = pygame.display.set_mode((2000, 2000))
-    screen.fill((255, 255, 255))
-
-    print('Drawing {} paths'.format(len(paths)))
-
-    """
-    furthest_x = 0
-    furthest_y = 0
-
-    for path in paths:
-        last_x = None
-        last_y = None
-
-        for x, y in path:
-            if not last_x == None:
-                pygame.draw.line(screen, (0, 0, 0), (last_x, last_y), (x, y))
-
-            last_x = x
-            last_y = y
-
-            if x > furthest_x:
-                furthest_x = x
-
-            if y > furthest_y:
-                furthest_y = y
-
-    print('Furthest x is {}, and furthest y is {}'.format(furthest_x, furthest_y))
-    pygame.display.flip()
-    """
-
-    i = 0
-    running = True
-
-    try:
-        while running:
-            for event in pygame.event.get():
-                if event.type == QUIT or event.type == pygame.KEYDOWN:
-                    running = False
-
-            path = paths[i]
-            
-            last_x = None
-            last_y = None
-
-            for x, y in path:
-                if not last_x == None:
-                    pygame.draw.line(screen, (0, 0, 0), (last_x, last_y), (x, y))
-
-                last_x = x
-                last_y = y
-
-            i += 1
-            if i >= len(paths):
-                i = 0
-
-            pygame.display.flip()
-
-            time.sleep(0.1)
-    except SystemExit:
-        pygame.display.quit()
-        pygame.quit()
 
 def path_points_from_svg(svg_filename):
     svg_paths, attributes = svg2paths(svg_filename)
 
-    SAMPLES_PER_PX = 0.5
-    #scale = 0.1 * 2.5
-    scale = 1.0
+    SAMPLES_PER_PX = 0.05
 
     # List of lists of points
     paths = []
@@ -268,8 +253,8 @@ def path_points_from_svg(svg_filename):
             if pt == None:
                 break
 
-            y = pt.real * scale
-            x = pt.imag * scale
+            x = pt.real
+            y = pt.imag
             current_path.append((x, y))
 
         # Only add paths that contain points
@@ -281,7 +266,7 @@ def path_points_from_svg(svg_filename):
 def paint_circle():
     path = []
 
-    r = 20.0
+    r = 100.0
     offset_x = 200.0
     offset_y = 200.0 
 
@@ -295,21 +280,30 @@ def paint_circle():
     plot_paths([path])
 
 def paint_svg(svg_filename):
-  paths = path_points_from_svg(svg_filename)
-  print('Loaded {} paths'.format(len(paths)))
-  #paint_paths(paths)
-  #render_paths(paths)
-  plot_paths(paths)
+    paths = path_points_from_svg(svg_filename)
+    #paint_paths(paths)
+    plot_paths(paths)
 
 if __name__ == '__main__':
-  rospy.init_node('waldo_svg_painter', anonymous=True)
+    rospy.init_node('waldo_plot_server', anonymous=True)
 
-  listener = tf2_ros.TransformListener(tf_buffer)
+    listener = tf2_ros.TransformListener(tf_buffer)
 
-  print('painting circle')
-  paint_circle()
-  """try:
-    #paint_svg('/home/owen/Downloads/toDraw_opt.svg')
-  except rospy.ROSInterruptException:
-    pass:"""
+    server_thread = Thread(target=run_server)
+    server_thread.daemon = True
+    server_thread.start()
+
+    try:
+        while True:
+          rospy.sleep(1)
+
+          if should_run:
+              print('Plotting...')
+              plot_paths([plotting_path])
+              break
+    except rospy.ROSInterruptException:
+        print('Exiting...')
+
+    rospy.spin()
+
 

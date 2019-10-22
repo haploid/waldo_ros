@@ -1,0 +1,4 @@
+<launch>
+  <node name="waldo_plot_server" pkg="waldo_paint" type="waldo_plot_server.py" respawn="false" output="screen">
+  </node>
+</launch>

@@ -1,0 +1,4 @@
+<launch>
+  <node name="vive_auto_calibrate" pkg="waldo_paint" type="vive_auto_calibrate.py" respawn="false" output="screen">
+  </node>
+</launch>

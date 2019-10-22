@@ -1,0 +1,4 @@
+<launch>
+  <node name="waldo_track_canvas" pkg="waldo_paint" type="vive_tracking.py" respawn="false" output="screen">
+  </node>
+</launch>

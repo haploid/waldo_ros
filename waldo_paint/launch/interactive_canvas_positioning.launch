@@ -1,0 +1,4 @@
+<launch>
+  <node name="interactive_canvas_positioning" pkg="waldo_paint" type="interactive_canvas_positioning.py" respawn="false" output="screen">
+  </node>
+</launch>
